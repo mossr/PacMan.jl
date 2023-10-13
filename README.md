@@ -2,6 +2,8 @@
 
 The game of Pacman in the Julia REPL.
 
+> ⚠ Work-in-progress.
+
 <p align="center">
   <img src="./img/pacman.png">
 </p>
