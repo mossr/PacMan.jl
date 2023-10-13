@@ -11,7 +11,7 @@ The game of Pacman in the Julia REPL.
 
 ## Installation
 ```julia
-] add https://github.com/mossr/Pacman
+] add https://github.com/mossr/Pacman.jl
 ```
 
 ## Gameplay
