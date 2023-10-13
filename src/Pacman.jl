@@ -70,7 +70,7 @@ function resetstate(; emoji=DEFAULTS.emoji, walls=DEFAULTS.walls)
     global DELAY = 0.02
     global DELAY′ = DELAY
     global HORIZ_DELAY = DELAY
-    global VERT_DELAY = HORIZ_DELAY*2.5
+    global VERT_DELAY = HORIZ_DELAY*(15/8) # (15/8) for terminal (14/6) for VS Code
     global MAXTIMEOUT = 120/DELAY
     global TIMEOUT = 0
     global KEY = nothing
