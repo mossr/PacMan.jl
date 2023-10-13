@@ -213,6 +213,41 @@ function game!(cells; flicker=false, subpixelmove=true)
 end
 
 
+"""
+Inner repeat `element` `n-1` times in matrix.
+"""
+function subpixels(X, n=2, element=" ")
+    X′ = similar(X, (n*size(X,1)-(n-1), n*size(X,2)-(n-1)))
+    i′ = j′ = 0
+    for i in axes(X,1)
+        for j in axes(X,2)
+            for k in 1:n-1
+                # io = 0 # (n÷i-n) + 1
+                # jo = 0 # (n÷j-n) + 1
+                # if i′+k ≤ size(X′,1) && j′+k ≤ size(X′,2)
+                try
+                    X′[i+i′, j+j′+k] = element
+                    X′[i+i′+k, j+j′] = element
+                catch err
+                end
+            end
+            j′ += n-1
+        end
+        i′ += n-1
+    end
+    # for i in axes(X′,1)
+    #     for j in axes(X′,2)
+    #         if mod(i, n) == 0 || mod(j, n) == 0
+    #             X′[i,j] = element
+    #         else
+    #             X′[i,j] = X[clamp(i-(i÷n),1,size(X,1)), clamp(j-(j÷n),1,size(X,2))]
+    #         end
+    #     end
+    # end
+    return X′
+end
+
+
 function pausegame()
     global gridx
     pause_msg = "PAUSED: play() to resume"
