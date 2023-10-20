@@ -140,13 +140,11 @@ function game!(cells; flicker=false, subpixelmove=true)
     gridx = size(cells,2)
     gridy = size(cells,1)
 
-    paused = keypress()
+    ispaused = keypress()
 
     # get postion
     p = [findall(c->c == "x", cells)[1].I...]
     
-    hit_wall = false
-
     # apply velocity
     PY, PX = p
     PY′ = PY + VY′
@@ -209,7 +207,7 @@ function game!(cells; flicker=false, subpixelmove=true)
         cells[:] = resetfield()
     end
 
-    return paused
+    return ispaused
 end
 
 
