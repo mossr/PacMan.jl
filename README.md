@@ -2,8 +2,6 @@
 
 The game of PacMan in the Julia REPL.
 
-> ⚠ Work-in-progress.
-
 <p align="center">
   <img src="./img/pacman.gif">
 </p>
@@ -54,7 +52,9 @@ The game will start automatically.
 </p>
 
 
-- `play(maze_type=5)`: Change to the Stanford tree "S" logo maze (*work-in-progress*).
+- `play(maze_type=5)`: Change to the Stanford tree "S" logo maze
+
+> ⚠ Work-in-progress.
 
 <p align="center">
   <img src="./img/pacman-maze5.png">
