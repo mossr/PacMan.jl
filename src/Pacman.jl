@@ -25,7 +25,7 @@ play(emoji=true)
 - `play(walls=true)`: Restart the game when hitting walls (default `true`)
 - `play(size=(20,20))`: Change game field dimensions (default `(20,20)`)
 """
-module Pacman
+module PacMan
 
 using Random
 using Distributions
@@ -33,7 +33,7 @@ using Statistics
 
 export play, restart, resetdelays!
 
-# play when running `using Pacman`
+# play when running `using PacMan`
 __init__() = restart()
 
 
@@ -68,6 +68,15 @@ end
 
 paint_ghost(params, color; endcolor=params.colors.reset) = paint(params.styled.ghost, color, endcolor)
 
+Base.@kwdef mutable struct GhostColors
+    inky
+    pinky
+    blinky
+    clyde
+    blue
+    blinking
+end
+
 Base.@kwdef struct GameParams
     styled = StyledChars()
     raw = RawChars()
@@ -100,10 +109,16 @@ Base.@kwdef struct GameParams
         orange = "\e[38;5;215m",
         lightred = "\e[38;5;217m",
         brightblue = "\e[38;5;21m",
-        darkred = "\e[38;5;52m",
+        darkred = "\e[38;5;88m", # "\e[38;5;52m",
+        darkgreen = "\e[38;5;29m",
+        stanford_blue = "\e[38;5;26m",
+        stanford_lagunita = "\e[38;5;24m",
+        stanford_orange = "\e[38;5;166m",
+        stanford_bay = "\e[38;5;65m",
+        stanford_gray = "\e[38;5;246m",
         reset = "\e[0m",
     )
-    ghost_colors = (
+    ghost_colors = GhostColors(
         inky = colors[:cyan],
         pinky = colors[:pink],
         blinky = colors[:red],
@@ -142,6 +157,8 @@ end
 Base.@kwdef mutable struct GameState
     params = GameParams()
     cells = missing
+    primary_color = params.colors.blue
+    secondary_color = params.colors.blue
     ghost_chars = [params.raw.ghosts.inky, params.raw.ghosts.blinky, params.raw.ghosts.pinky, params.raw.ghosts.clyde]
     ghosts = (
         inky = (endcolor=params.colors.reset) -> paint_ghost(params, params.ghost_colors.inky; endcolor),
@@ -152,7 +169,7 @@ Base.@kwdef mutable struct GameState
         blinking = (endcolor=params.colors.reset) -> paint_ghost(params, params.ghost_colors.blinking; endcolor),
     )
     ghost_infos = Dict{String,Any}()
-    maze_type = 1 # 1 == classic PacMan, 2 = PocMan 17x19, 3 = 9x18, 4 = SISL 10x22
+    maze_type = 1 # 1 == classic PacMan, 2 = PocMan 17x19, 3 = 9x18, 4 = SISL 10x22, 5 = Stanford S MxN
     is_pocman = false
     random_pellets = false
     motion = Motion()
@@ -174,6 +191,8 @@ Base.@kwdef mutable struct GameState
         params.raw.portal_right=>missing,
     )
     mark = " " # current mark PacMan is on top of
+    extra_legals = [] # extra legal marks
+    underlay = ""
     buffer = nothing
 end
 
@@ -200,7 +219,7 @@ end
 
 
 """
-Pacman options:
+PacMan options:
 ...
 """
 function play(gs::GameState=GameState();
@@ -333,7 +352,7 @@ function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, 
             motion′.x = motion.x + motion.dx # keep previous velocity
             p′ = [motion′.y, motion′.x] # [row v^, col <>]
             mark′ = cells[p′...]
-            if gs.mark == gs.params.raw.screen
+            if gs.mark ∈ gs.extra_legals
                 cells[p...] = gs.mark
             else
                 cells[p...] = " "
@@ -349,7 +368,7 @@ function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, 
             motion.dy = motion′.dy
             p′ = [motion′.y, motion′.x] # [row v^, col <>]
             mark′ = cells[p′...]
-            if gs.mark == gs.params.raw.screen
+            if gs.mark ∈ gs.extra_legals
                 cells[p...] = gs.mark
             else
                 cells[p...] = " "
@@ -404,7 +423,15 @@ function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, 
 
     # Finished level
     finished = sum(cells .== gs.params.raw.dot) + sum(cells .== gs.params.raw.super_dot) == 0 || pacman_on_ghost || ghost_on_pacman
-    drawfield(stylemap(gs; score=gs.score, flicker, finished), size(cells,1), size(cells,2))
+    underlay_cells = []
+    if !isempty(gs.underlay)
+        underlay_rows = split(gs.underlay, "\n")
+        underlay_cells = mapreduce(permutedims, vcat, split.(underlay_rows, ""))
+        # underlay = stylemap(gs, underlay_cells; score=gs.score, flicker, finished)
+        # drawfield(underlay, size(underlay_cells,1), size(underlay_cells,2))
+    end
+    field = stylemap(gs, cells; score=gs.score, flicker, finished, underlay_cells)
+    drawfield(field, size(cells,1), size(cells,2))
     
     if finished
         sleep(gs.done_delay)
@@ -461,7 +488,7 @@ function moveghost!(gs)
 
         curr_dir = ghostinfo.dir
         
-        if curr_dir != [0, 0] && ghostinfo.isout
+        if curr_dir != [0, 0] # && ghostinfo.isout
             # do not double back (i.e., go backwards)
             los_pellets[gs.params.dirs[findfirst(map(d->d == curr_dir .* -1, gs.params.dirs))]] = 0
         end
@@ -491,7 +518,13 @@ function moveghost!(gs)
         move_dir = gs.params.dirs[rand(distr)]
         p_ghost′ = p_ghost + move_dir
 
+        max_sampled = 40
+        num_sampled = 1
         while !(checkbounds(Bool, cells, p_ghost′...) && islegal(gs, cells[p_ghost′...]; ghost=ghostinfo))
+            num_sampled +=1
+            if num_sampled > max_sampled
+                break
+            end
             move_dir = gs.params.dirs[rand(distr)]
             p_ghost′ = p_ghost + move_dir
         end
@@ -674,7 +707,6 @@ SCORE: #*****************************"""
     elseif gs.maze_type == 3
         gs.ghost_chars = [gs.params.raw.ghosts.inky, gs.params.raw.ghosts.clyde]
         field = """
-***************************************
 ╔═════════╦═════════════════╦═════════╗
 ║|o d d d|║|d d d d d d d d|║|d d d d|║
 ║|d|╔══|d|╨|d|═══════════|d|╨|d|══╗|d|║
@@ -689,6 +721,9 @@ SCORE: #*****************************"""
 SCORE: #*******************************"""
     elseif gs.maze_type == 4
         gs.ghost_chars = [gs.params.raw.ghosts.inky, gs.params.raw.ghosts.blinky]
+        gs.primary_color = gs.params.colors.darkred
+        gs.secondary_color = gs.primary_color
+        push!(gs.extra_legals, gs.params.raw.screen)
         field = """
     ╔══════════════════════════════════════════════════
     ║|d d d d d d d d d d d d d d d d d d   - - - - - >
@@ -703,12 +738,71 @@ SCORE: #*******************************"""
 < - - d d d d d d d     x           d d d d d d d|║    
 ══════════════════════════════════════════════════╝    
 SCORE: #***********************************************"""
+    elseif gs.maze_type == 5
+        gs.ghost_chars = [gs.params.raw.ghosts.inky, gs.params.raw.ghosts.clyde]
+        gs.primary_color = gs.params.colors.darkred
+        gs.secondary_color = gs.params.colors.darkgreen
+        # all ghosts starts outside
+        gs.ghost_infos[gs.params.raw.ghosts.inky].isout = true
+        gs.ghost_infos[gs.params.raw.ghosts.clyde].isout = true
+        gs.params.ghost_colors.inky = gs.params.colors.stanford_lagunita
+        gs.params.ghost_colors.clyde = gs.params.colors.stanford_gray
+        tree = ["╱", "│", "╲", "─", "┌", "┐", "└", "┘", "┻", "━", "┘", "└", "┘", "┐"]
+        push!(gs.extra_legals, tree...)
+        field = """
+    ╔═══════════════════╗    
+  ╔═╝                   ╚═╗  
+╔═╝                       ╚═╗
+║|d                         ║
+║|d       ╔═══════╗         ║
+║|d       ║       ║    x   >╏
+║|d       ║       ╚═════════╝
+║|d       ║                  
+║|d       ╚═════════════╗    
+║|o                     ╚═╗  
+╚═╗                       ╚═╗
+  ╚═╗                     o|║
+    ╚═════════════╗       d|║
+                  ║       d|║
+╔═════════╗       ║       d|║
+╏<        ║       ║       d|║
+║         ╚═══════╝       d|║
+║                         d|║
+╚═╗                       ╔═╝
+  ╚═╗       𝕀   ℂ       ╔═╝  
+    ╚═══════════════════╝    
+SCORE: #*********************"""
+        underlay = """
+    ╔════════╱│╲════════╗    
+  ╔═╝       ╱╱│╲╲       ╚═╗  
+╔═╝         ╱╱│╲╲         ╚═╗
+║         ╱╱╱╱│╲╲╲╲         ║
+║         ╔╱╱╱│╲╲╲╗         ║
+║         ║╱╱╱│╲╲╲║         ╏
+║       ╱╱╱╱╱╱│╲╲╲╲╲╲═══════╝
+║         ╱╱╱╱│╲╲╲╲          
+║       ╱╱╱╱╱╱│╲╲╲╲╲╲═══╗    
+║         ╱╱╱╱│╲╲╲╲     ╚═╗  
+╚═╗   ╱╱╱╱╱╱╱╱│╲╲╲╲╲╲╲╲   ╚═╗
+  ╚═╗     ╱╱╱╱│╲╲╲╲         ║
+    ╚╱╱╱╱╱╱╱╱╱│╲╲╲╲╲╲╲╲╲    ║
+         ╱╱╱╱╱│╲╲╲╲╲        ║
+╔═════╱╱╱╱╱╱╱╱│╲╲╲╲╲╲╲╲     ║
+╏  ╱╱╱╱╱╱╱╱╱╱│ │╲╲╲╲╲╲╲╲╲╲  ║
+║         ╚══│ │══╝         ║
+║            │ │            ║
+╚═╗       ┌──┘ └──┐       ╔═╝
+  ╚═╗   ┌─┘       └─┐   ╔═╝  
+    ╚═══└───────────┘═══╝    
+*****************************"""
+        gs.underlay = underlay
     else
         error("The maze_type of $(gs.maze_type) needs to be either:
         1 = Classic PacMan
         2 = PocMan 17x19 (Silver et al., 2010)
         3 = PocMan 9x18
-        4 = SISL 10x22")
+        4 = SISL 10x22
+        5 = Stanford S MxN")
     end
 
     for k in keys(gs.ghost_infos)
@@ -749,7 +843,8 @@ end
 
 
 function islegal(gs::GameState, cell; ghost::Union{Missing,GhostInfo}=missing)
-    legal_marks = [" ", gs.params.raw.dot, gs.params.raw.super_dot, gs.params.raw.portal_left, gs.params.raw.portal_right, "-", gs.params.raw.screen]
+    legal_marks = [" ", gs.params.raw.dot, gs.params.raw.super_dot, gs.params.raw.portal_left, gs.params.raw.portal_right, "-"]
+    union!(legal_marks, gs.extra_legals)
     if !ismissing(ghost)
         push!(legal_marks, gs.params.raw.pacman, gs.ghost_chars...)
         if !ghost.isout
@@ -763,15 +858,25 @@ isportal(gs, cell) = cell ∈ [gs.params.raw.portal_left, gs.params.raw.portal_r
 onghost(gs, cell; exclude="") = any(map(c->occursin(c, cell), filter(c->c != exclude, gs.ghost_chars)))
 whichghosts(cell) = length(cell) == 1 ? [cell] : split(cell, "+")
 outofbounds(cell) = cell == "*"
-isbumper(cell) = cell == "|"
+ischaracter(gs, cell) = cell ∈ [gs.params.raw.pacman, gs.ghost_chars...]
 
-
-function stylemap(gs::GameState; score=0, flicker=false, finished=false)
+function stylemap(gs::GameState, cells; score=0, flicker=false, finished=false, underlay_cells=[])
     params = gs.params
-    border = finished ? params.colors.white : gs.maze_type == 4 ? params.colors.darkred : params.colors.blue
+    border = finished ? params.colors.white : gs.primary_color
+    cells = copy(cells)
+
+    # Draw underlay
+    if !isempty(underlay_cells)
+        for i in axes(cells, 1)
+            for j in axes(cells, 2)
+                if underlay_cells[i,j] ∈ gs.extra_legals && !ischaracter(gs, cells[i,j])
+                    cells[i,j] = underlay_cells[i,j]
+                end
+            end
+        end
+    end
 
     # Handle overlapping ghosts
-    cells = copy(gs.cells)
     for i in axes(cells,1)
         for j in axes(cells,2)
             if length(cells[i,j]) > 1
@@ -800,6 +905,10 @@ function stylemap(gs::GameState; score=0, flicker=false, finished=false)
         else
             return ""
         end
+    end
+
+    for extra_legal in gs.extra_legals
+        field = replace(field, extra_legal=>paint(extra_legal, finished ? gs.params.colors.white : gs.secondary_color, border))
     end
     
     field = replace(field, "HIGH SCORE"=>paint("HIGH SCORE", params.colors.white, border))

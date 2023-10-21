@@ -5,13 +5,13 @@ The game of Pacman in the Julia REPL.
 > ⚠ Work-in-progress.
 
 <p align="center">
-  <img src="./img/pacman.png">
+  <img src="./img/pacman.gif">
 </p>
 
 
 ## Installation
 ```julia
-] add https://github.com/mossr/Pacman.jl
+] add https://github.com/mossr/PacMan.jl
 ```
 
 ## Gameplay
@@ -29,6 +29,36 @@ The game will start automatically.
 * `s` to apply down velocity
 * `w` to apply up velocity
 * `backtick` to pause, then `play()` to resume
+
+
+
+## Other options
+- `play(maze_type=2)`: Change to the 17x19 PocMan maze from Silver et al. (2010).
+
+<p align="center">
+  <img src="./img/pacman-maze2.png">
+</p>
+
+
+- `play(maze_type=3)`: Change to the 9x18 PacMan maze.
+
+<p align="center">
+  <img src="./img/pacman-maze3.png">
+</p>
+
+
+- `play(maze_type=4)`: Change to the SISL maze (Stanford Intelligent Systems Laboratory).
+
+<p align="center">
+  <img src="./img/pacman-maze4.png">
+</p>
+
+
+- `play(maze_type=5)`: Change to the Stanford tree "S" logo maze (*work-in-progress*).
+
+<p align="center">
+  <img src="./img/pacman-maze5.png">
+</p>
 
 
 ---
