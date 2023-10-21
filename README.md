@@ -1,6 +1,6 @@
-# Pacman.jl 
+# PacMan.jl 
 
-The game of Pacman in the Julia REPL.
+The game of PacMan in the Julia REPL.
 
 > ⚠ Work-in-progress.
 
@@ -16,7 +16,7 @@ The game of Pacman in the Julia REPL.
 
 ## Gameplay
 ```julia
-using Pacman
+using PacMan
 ```
 The game will start automatically.
 - Hit `backtick` to pause the game.
