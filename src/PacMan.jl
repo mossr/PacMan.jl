@@ -843,7 +843,7 @@ isportal(gs, cell) = cell ∈ [gs.params.raw.portal_left, gs.params.raw.portal_r
 onghost(gs, cell; exclude="") = any(map(c->occursin(c, cell), filter(c->c != exclude, gs.ghost_chars)))
 whichghosts(cell) = length(cell) == 1 ? [cell] : split(cell, "+")
 outofbounds(cell) = cell == "*"
-ischaracter(gs, cell) = cell ∈ [gs.params.raw.pacman, gs.ghost_chars...]
+ischaracter(gs, cell) = string(cell[1]) ∈ [gs.params.raw.pacman, gs.ghost_chars...]
 
 function stylemap(gs::GameState, cells; score=0, flicker=false, finished=false, underlay_cells=[])
     params = gs.params
