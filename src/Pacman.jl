@@ -34,7 +34,7 @@ using Statistics
 export play, restart, resetdelays!
 
 # play when running `using PacMan`
-__init__() = restart()
+# __init__() = restart()
 
 
 Base.@kwdef struct StyledChars
@@ -393,7 +393,7 @@ function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, 
     pacman_on_ghost = false
 
     if subpixelmove
-        # ghost_on_pacman = moveghost!(gs)
+        ghost_on_pacman = moveghost!(gs)
         if ghost_on_pacman
             cells[p′...] = gs.params.raw.dead_pacman
             pacman_on_ghost = true

@@ -15,8 +15,9 @@ The game of PacMan in the Julia REPL.
 ## Gameplay
 ```julia
 using PacMan
+play()
 ```
-The game will start automatically.
+
 - Hit `backtick` to pause the game.
 - Resume with `play()` or restart the game with `restart()`
 
