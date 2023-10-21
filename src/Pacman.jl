@@ -34,8 +34,10 @@ using Statistics
 export play, restart, resetdelays!
 
 # play when running `using PacMan`
-# __init__() = restart()
-
+function __init__()
+    # restart() # for auto-start
+    @info "To start PacMan, run: play()"
+end
 
 Base.@kwdef struct StyledChars
     pacman = "⬤"
