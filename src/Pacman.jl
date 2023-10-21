@@ -393,7 +393,7 @@ function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, 
     pacman_on_ghost = false
 
     if subpixelmove
-        ghost_on_pacman = moveghost!(gs)
+        # ghost_on_pacman = moveghost!(gs)
         if ghost_on_pacman
             cells[p′...] = gs.params.raw.dead_pacman
             pacman_on_ghost = true
@@ -723,6 +723,8 @@ SCORE: #*******************************"""
         gs.ghost_chars = [gs.params.raw.ghosts.inky, gs.params.raw.ghosts.blinky]
         gs.primary_color = gs.params.colors.darkred
         gs.secondary_color = gs.primary_color
+        gs.params.ghost_colors.inky = gs.params.colors.stanford_lagunita
+        gs.params.ghost_colors.blinky = gs.params.colors.stanford_gray
         push!(gs.extra_legals, gs.params.raw.screen)
         field = """
     ╔══════════════════════════════════════════════════
@@ -739,14 +741,14 @@ SCORE: #*******************************"""
 ══════════════════════════════════════════════════╝    
 SCORE: #***********************************************"""
     elseif gs.maze_type == 5
-        gs.ghost_chars = [gs.params.raw.ghosts.inky, gs.params.raw.ghosts.clyde]
+        gs.ghost_chars = [gs.params.raw.ghosts.inky, gs.params.raw.ghosts.blinky]
         gs.primary_color = gs.params.colors.darkred
         gs.secondary_color = gs.params.colors.darkgreen
         # all ghosts starts outside
         gs.ghost_infos[gs.params.raw.ghosts.inky].isout = true
-        gs.ghost_infos[gs.params.raw.ghosts.clyde].isout = true
+        gs.ghost_infos[gs.params.raw.ghosts.blinky].isout = true
         gs.params.ghost_colors.inky = gs.params.colors.stanford_lagunita
-        gs.params.ghost_colors.clyde = gs.params.colors.stanford_gray
+        gs.params.ghost_colors.blinky = gs.params.colors.stanford_gray
         tree = ["╱", "│", "╲", "─", "┌", "┐", "└", "┘", "┻", "━", "┘", "└", "┘", "┐"]
         push!(gs.extra_legals, tree...)
         field = """
@@ -769,7 +771,7 @@ SCORE: #***********************************************"""
 ║         ╚═══════╝       d|║
 ║                         d|║
 ╚═╗                       ╔═╝
-  ╚═╗       𝕀   ℂ       ╔═╝  
+  ╚═╗       𝕀   𝔹       ╔═╝  
     ╚═══════════════════╝    
 SCORE: #*********************"""
         underlay = """
