@@ -275,10 +275,7 @@ end
 function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, t=missing)
     motion = gs.motion
     motion′ = gs.motion′
-
     cells = gs.cells
-    gridx = size(cells,2)
-    gridy = size(cells,1)
 
     keypress!(gs)
 
@@ -316,7 +313,6 @@ function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, 
     px′′ = motion.x + motion.dx
     p′′ = [py′′, px′′]
     cell′′ = cells[p′′...]
-    mark = nothing
     mark′ = nothing
 
     p′ = p
@@ -424,12 +420,12 @@ function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, 
 end
 
 
-function getmark(gs, cells, pos)
+function getmark(gs, cells, pos; exclude="")
     cell = cells[pos...]
-    if onghost(gs, cell)
+    if onghost(gs, cell; exclude)
         non_ghost_mark = ""
         for cg in whichghosts(cell)
-            if !onghost(gs, gs.ghost_infos[cg].mark)
+            if !onghost(gs, gs.ghost_infos[cg].mark; exclude)
                 non_ghost_mark = gs.ghost_infos[cg].mark
                 break
             end
@@ -443,18 +439,13 @@ end
 
 function moveghost!(gs)
     cells = gs.cells
-    gridx = size(cells,2)
-    gridy = size(cells,1)
 
-    prev_marks = Dict(map(c->Pair(c, ""), gs.ghost_chars))
-    prev_pos = Dict(map(c->Pair(c, []), gs.ghost_chars))
-    new_pos = Dict(map(c->Pair(c, []), gs.ghost_chars))
+    prev_marks = Dict{String,Any}(map(c->Pair(c, missing), gs.ghost_chars))
+    prev_pos = Dict{String,Vector{Int}}(map(c->Pair(c, []), gs.ghost_chars))
 
     for c_ghost in gs.ghost_chars
         p_ghost = [findfirst(c->occursin(c_ghost,c), cells).I...]
-
-        _p_ghost = p_ghost
-        prev_pos[c_ghost] = _p_ghost
+        prev_pos[c_ghost] = p_ghost
 
         ghostinfo = gs.ghost_infos[c_ghost]
         prev_marks[c_ghost] = ghostinfo.mark
@@ -463,7 +454,7 @@ function moveghost!(gs)
 
         curr_dir = ghostinfo.dir
         
-        if curr_dir != [0, 0] # && ghostinfo.isout
+        if curr_dir != [0, 0]
             # do not double back (i.e., go backwards)
             los_pellets[gs.params.dirs[findfirst(map(d->d == curr_dir .* -1, gs.params.dirs))]] = 0
         end
@@ -493,12 +484,12 @@ function moveghost!(gs)
         move_dir = gs.params.dirs[rand(distr)]
         p_ghost′ = p_ghost + move_dir
 
-        max_sampled = 40
         num_sampled = 1
+        max_sampled = 1_000
         while !(checkbounds(Bool, cells, p_ghost′...) && islegal(gs, cells[p_ghost′...]; ghost=ghostinfo))
             num_sampled +=1
             if num_sampled > max_sampled
-                break
+                error("Ghosts cannot move, only illegal moves available (this should never be hit)")
             end
             move_dir = gs.params.dirs[rand(distr)]
             p_ghost′ = p_ghost + move_dir
@@ -517,46 +508,63 @@ function moveghost!(gs)
         end
         
         p_ghost = p_ghost′
-        new_pos[c_ghost] = p_ghost
 
-        ghostinfo.mark = getmark(gs, cells, p_ghost)
+        ghostinfo.mark = cells[p_ghost′...]
         ghostinfo.pos = p_ghost
         ghostinfo.dir = move_dir
         ghostinfo.isout = ghostinfo.isout || ghostinfo.mark == "─"
     end
 
-    for (c_ghost, pos) in prev_pos
-        cells[pos...] = prev_marks[c_ghost]
+    ghost_on_pacman = false
+    remove_ghosts(cell) = length(cell) > 1 ? string(cell[end]) : cell
+
+    # first, remove all ghosts from previous cells
+    for (c_ghost, _pos) in prev_pos
+        _mark = prev_marks[c_ghost]
+        cells[_pos...] = remove_ghosts(_mark)
     end
 
-    ghost_on_pacman = false
+    new_cell_map = Dict()
 
-    for (c_ghost, pos) in new_pos
+    for c_ghost in gs.ghost_chars
+        gi = gs.ghost_infos[c_ghost]
+        pos = gi.pos
         this_ghost_on_pacman = cells[pos...] == gs.params.raw.pacman
         if this_ghost_on_pacman
-            ghostinfo = gs.ghost_infos[c_ghost]
-            if ghostinfo.isblue
-                cells[pos...] = gs.ghost_infos[c_ghost].mark
+            if gi.isblue
+                cells[pos...] = gi.mark
                 gs.score += gs.params.scores.ghost # update score
-                # send ghost to cage
-                gs.ghost_infos[c_ghost] = GhostInfo(
-                    init_pos=gs.ghost_infos[c_ghost].init_pos,
-                    pos=gs.ghost_infos[c_ghost].init_pos)
-                    # isout=(gs.maze_type == 4)) # SISL maze defaults to ghosts already being "out"
+                gs.ghost_infos[c_ghost] = GhostInfo( # send ghost to cage
+                    init_pos=gi.init_pos,
+                    pos=gi.init_pos)
                 cells[gs.ghost_infos[c_ghost].init_pos...] = c_ghost
             else
                 ghost_on_pacman = ghost_on_pacman || this_ghost_on_pacman
                 cells[pos...] = gs.params.raw.dead_pacman
             end
         else
-            if onghost(gs, cells[pos...]; exclude=c_ghost)
-                cells[pos...] *= "+"
-                cells[pos...] *= c_ghost
+            # next, move ghosts to their (temp) new cells (appending the current non-ghost mark)
+            gi = gs.ghost_infos[c_ghost]
+            pos = gi.pos
+            mark = remove_ghosts(gi.mark)
+            if !haskey(new_cell_map, pos)
+                new_cell_map[pos] = ""
+            end
+            if isempty(new_cell_map[pos])
+                new_cell_map[pos] = c_ghost
             else
-                cells[pos...] = c_ghost
+                new_cell_map[pos] *= "+" * c_ghost
+            end
+            if !occursin(mark, new_cell_map[pos])
+                # do not double count marks, only append unique legal marks
+                new_cell_map[pos] *= "+" * mark
             end
         end
-        ghostinfo = gs.ghost_infos[c_ghost]
+    end
+
+    # finally, move the new combined cell onto the map
+    for (pos, mark) in new_cell_map
+        cells[pos...] = mark
     end
 
     return ghost_on_pacman
@@ -564,7 +572,7 @@ end
 
 
 function count_los_pellets(gs::GameState, pos, ghost::GhostInfo)
-    C = Dict(map(d->Pair(d, 0), gs.params.dirs))
+    C = Dict(map(d->Pair(d, 1), gs.params.dirs)) # not +1 for adding probability mass to move in the direction of no pellots
 
     for d in gs.params.dirs
         ax = findfirst(abs.(d) .== 1)
