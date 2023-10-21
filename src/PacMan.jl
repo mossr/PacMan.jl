@@ -1,30 +1,3 @@
-"""
-## Gameplay
-```julia
-using Snake
-```
-The game will start automatically.
-- Hit `esc` to pause the game.
-- Resume with `play()` or restart the game with `restart()`
-
-## Controls (wasd)
-* `a` and `d` to apply left and right velocity
-* `s` to apply down velocity
-* `w` to apply up velocity
-* `backtick` to pause, then `play()` to resume
-
-## Emoji support
-
-To play using emojis, run:
-
-```julia
-play(emoji=true)
-```
-
-## Other options
-- `play(walls=true)`: Restart the game when hitting walls (default `true`)
-- `play(size=(20,20))`: Change game field dimensions (default `(20,20)`)
-"""
 module PacMan
 
 using Random
