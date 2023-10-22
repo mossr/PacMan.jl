@@ -2,6 +2,7 @@ module PacMan
 
 using Random
 using Distributions
+using LinearAlgebra
 using Statistics
 
 export play, restart, resetdelays!
@@ -38,7 +39,8 @@ Base.@kwdef struct RawChars
     portal_passage = "-"
     score = "#"
     screen = "="
-    # | * " "
+    secret = "?"
+    # TODO: | * - " "
 end
 
 paint_ghost(params, color; endcolor=params.colors.reset) = paint(params.styled.ghost, color, endcolor)
@@ -67,10 +69,6 @@ Base.@kwdef struct GameParams
         dot = 10,
         super_dot = 10,
     )
-    timers = (
-        super = 15, # seconds
-        super_blink = 12, # seconds
-    )
     dirs = [[-1,0], [1,0], [0,-1], [0,1]] # up, down, left, right
     colors = (
         black = "\e[0;30m",
@@ -85,7 +83,7 @@ Base.@kwdef struct GameParams
         lightred = "\e[38;5;217m",
         brightblue = "\e[38;5;21m",
         darkred = "\e[38;5;88m", # "\e[38;5;52m",
-        darkgreen = "\e[38;5;29m",
+        stanford_green = "\e[38;5;29m",
         stanford_blue = "\e[38;5;26m",
         stanford_lagunita = "\e[38;5;24m",
         stanford_orange = "\e[38;5;166m",
@@ -114,6 +112,7 @@ Base.@kwdef mutable struct GhostInfo
     isblinking = false
     blinkingon = false
     tblink = 0
+    seeking = false
 end
 
 Base.@kwdef mutable struct Motion
@@ -156,6 +155,10 @@ Base.@kwdef mutable struct GameState
     done_delay = 3 # seconds
     timeout = 0
     max_timeout = 120/delay
+    timers = Dict{Symbol, Number}(
+        :super => 15, # seconds
+        :super_blink => 12, # seconds
+    )
     score = 0
     paused = false
     key = nothing
@@ -234,7 +237,7 @@ function play(gs::GameState=GameState();
         # TODO: GameState
         flicker = false
         tflicker = t0
-        flickerdelay = 0.4 # s
+        flickerdelay = 0.4 # seconds
 
         subpixelmove = false
         frames = 0
@@ -373,13 +376,13 @@ function game!(gs::GameState; flicker=false, subpixelmove=true, kbtask=missing, 
 
     for k in keys(gs.ghost_infos)
         gi = gs.ghost_infos[k]
-        if abs(gi.tblue - t) > gs.params.timers.super
+        if abs(gi.tblue - t) > gs.timers[:super]
             gi.isblue = false
             gi.tblue = 0
             gi.isblinking = false
             gi.blinkingon = false
             gi.tblink = 0
-        elseif abs(gi.tblue - t) > gs.params.timers.super_blink
+        elseif abs(gi.tblue - t) > gs.timers[:super_blink]
             gi.isblinking = true
             if gi.tblink == 0
                 gi.tblink = t
@@ -437,8 +440,9 @@ function getmark(gs, cells, pos; exclude="")
 end
 
 
-function moveghost!(gs)
+function moveghost!(gs::GameState)
     cells = gs.cells
+    dirs = gs.params.dirs
 
     prev_marks = Dict{String,Any}(map(c->Pair(c, missing), gs.ghost_chars))
     prev_pos = Dict{String,Vector{Int}}(map(c->Pair(c, []), gs.ghost_chars))
@@ -449,50 +453,73 @@ function moveghost!(gs)
 
         ghostinfo = gs.ghost_infos[c_ghost]
         prev_marks[c_ghost] = ghostinfo.mark
-
-        los_pellets = count_los_pellets(gs, p_ghost, ghostinfo)
-
         curr_dir = ghostinfo.dir
         
-        if curr_dir != [0, 0]
-            # do not double back (i.e., go backwards)
-            los_pellets[gs.params.dirs[findfirst(map(d->d == curr_dir .* -1, gs.params.dirs))]] = 0
-        end
+        p_random = 1
+        p_random_thresh = 1
 
-        pellets_in_dir = map(d->los_pellets[d], gs.params.dirs)
-        total_pellets = sum(pellets_in_dir)
-        if total_pellets == 0
-            if ghostinfo.isout
-                mask = map(d->d ∉ [curr_dir .* -1], gs.params.dirs)
-                probs = normalize1(mask)
-            else
-                mask = ones(length(pellets_in_dir))
-                if gs.maze_type == 4
-                    cage_mask_dir = [-1,0] # do not move up when in cage (SISL maze has cage opening at pointed down)
-                else
-                    cage_mask_dir = [1,0] # do not move down when in cage
-                end
-                cage_mask = map(d->d == cage_mask_dir, gs.params.dirs)
-                mask[cage_mask] .= 0
-                probs = normalize1(mask)
-            end
-        else
-            probs = normalize1(pellets_in_dir)
-        end
-
-        distr = Categorical(probs)
-        move_dir = gs.params.dirs[rand(distr)]
-        p_ghost′ = p_ghost + move_dir
-
-        num_sampled = 1
-        max_sampled = 1_000
-        while !(checkbounds(Bool, cells, p_ghost′...) && islegal(gs, cells[p_ghost′...]; ghost=ghostinfo))
-            num_sampled +=1
-            if num_sampled > max_sampled
-                error("Ghosts cannot move, only illegal moves available (this should never be hit)")
-            end
-            move_dir = gs.params.dirs[rand(distr)]
+        if ghostinfo.seeking
+            # Pick (legal) move that heads towards PacMan (or away when blue)
+            away = ghostinfo.isblue ? -1 : 1
+            p_pacman = [gs.motion.y, gs.motion.x]
+            dist = [islegal(gs, cells[p_ghost + d...]; ghost=ghostinfo) ? away*norm(p_pacman - (p_ghost + d)) : Inf for d in dirs]
+            move_dir = dirs[argmin(dist)]
             p_ghost′ = p_ghost + move_dir
+
+            p_random = rand() # add random noise
+            p_random_thresh = 1//3
+
+            # TODO: DFS to get to PacMan
+            queue = []
+
+            for _ in 1:1000
+
+            end
+        end
+
+        if p_random ≤ p_random_thresh
+            los_pellets = count_los_pellets(gs, p_ghost, ghostinfo)
+
+            if curr_dir != [0, 0]
+                # do not double back (i.e., go backwards)
+                los_pellets[dirs[findfirst(map(d->d == curr_dir .* -1, dirs))]] = 0
+            end
+
+            pellets_in_dir = map(d->los_pellets[d], dirs)
+            total_pellets = sum(pellets_in_dir)
+            if total_pellets == 0
+                if ghostinfo.isout
+                    mask = map(d->d ∉ [curr_dir .* -1], dirs)
+                    probs = normalize1(mask)
+                else
+                    mask = ones(length(pellets_in_dir))
+                    if gs.maze_type == 4
+                        cage_mask_dir = [-1,0] # do not move up when in cage (SISL maze has cage opening at pointed down)
+                    else
+                        cage_mask_dir = [1,0] # do not move down when in cage
+                    end
+                    cage_mask = map(d->d == cage_mask_dir, dirs)
+                    mask[cage_mask] .= 0
+                    probs = normalize1(mask)
+                end
+            else
+                probs = normalize1(pellets_in_dir)
+            end
+
+            distr = Categorical(probs)
+            move_dir = dirs[rand(distr)]
+            p_ghost′ = p_ghost + move_dir
+
+            num_sampled = 1
+            max_sampled = 1_000
+            while !(checkbounds(Bool, cells, p_ghost′...) && islegal(gs, cells[p_ghost′...]; ghost=ghostinfo))
+                num_sampled +=1
+                if num_sampled > max_sampled
+                    error("Ghosts cannot move, only illegal moves available (this should never be hit)")
+                end
+                move_dir = dirs[rand(distr)]
+                p_ghost′ = p_ghost + move_dir
+            end
         end
 
         cell′ = cells[p_ghost′...]
@@ -706,7 +733,7 @@ SCORE: #*******************************"""
         gs.ghost_chars = [gs.params.raw.ghosts.inky, gs.params.raw.ghosts.blinky]
         gs.primary_color = gs.params.colors.darkred
         gs.secondary_color = gs.primary_color
-        gs.params.ghost_colors.inky = gs.params.colors.stanford_lagunita
+        gs.params.ghost_colors.inky = gs.params.colors.stanford_green
         gs.params.ghost_colors.blinky = gs.params.colors.stanford_gray
         push!(gs.extra_legals, gs.params.raw.screen)
         field = """
@@ -724,37 +751,43 @@ SCORE: #*******************************"""
 ══════════════════════════════════════════════════╝    
 SCORE: #***********************************************"""
     elseif gs.maze_type == 5
-        gs.ghost_chars = [gs.params.raw.ghosts.inky, gs.params.raw.ghosts.blinky]
         gs.primary_color = gs.params.colors.darkred
-        gs.secondary_color = gs.params.colors.darkgreen
-        # all ghosts starts outside
-        gs.ghost_infos[gs.params.raw.ghosts.inky].isout = true
-        gs.ghost_infos[gs.params.raw.ghosts.blinky].isout = true
-        gs.params.ghost_colors.inky = gs.params.colors.stanford_lagunita
+        gs.secondary_color = gs.params.colors.stanford_green
+        gs.ghost_chars = [
+            # gs.params.raw.ghosts.inky,
+            gs.params.raw.ghosts.blinky,
+        ]
+        # gs.params.ghost_colors.inky = gs.params.colors.stanford_lagunita
         gs.params.ghost_colors.blinky = gs.params.colors.stanford_gray
+        for c_ghost in gs.ghost_chars
+            gs.ghost_infos[c_ghost].isout = true # all ghosts starts outside
+            gs.ghost_infos[c_ghost].seeking = true # ghosts seek out PacMan
+        end
+        gs.timers[:super] = 5 # seconds
+        gs.timers[:super_blink] = 2.5 # seconds
         tree = ["╱", "│", "╲", "─", "┌", "┐", "└", "┘", "┻", "━", "┘", "└", "┘", "┐"]
         push!(gs.extra_legals, tree...)
         field = """
     ╔═══════════════════╗    
-  ╔═╝                   ╚═╗  
-╔═╝                       ╚═╗
-║|d                         ║
-║|d       ╔═══════╗         ║
-║|d       ║       ║    x   >╏
-║|d       ║       ╚═════════╝
-║|d       ║                  
-║|d       ╚═════════════╗    
-║|o                     ╚═╗  
-╚═╗                       ╚═╗
-  ╚═╗                     o|║
-    ╚═════════════╗       d|║
-                  ║       d|║
-╔═════════╗       ║       d|║
-╏<        ║       ║       d|║
-║         ╚═══════╝       d|║
-║                         d|║
-╚═╗                       ╔═╝
-  ╚═╗       𝕀   𝔹       ╔═╝  
+  ╔═╝|                 |╚═╗  
+╔═╝|                     |╚═╗
+║|                         |║
+║|       |╔═══════╗|       |║
+║|       |║       ║|   x   >╏
+║|       |║       ╚═════════╝
+║|       |║                  
+║|       |╚═════════════╗    
+║|                     |╚═╗  
+╚═╗|                     |╚═╗
+  ╚═╗|                     |║
+    ╚═════════════╗|       |║
+             |o|  ║|       |║
+╔═════════╗  | |  ║|       |║
+╏<       |║  | |  ║|       |║
+║|       |╚═══?═══╝|       |║
+║|                         |║
+╚═╗|                     |╔═╝
+  ╚═╗|        𝔹        |╔═╝  
     ╚═══════════════════╝    
 SCORE: #*********************"""
         underlay = """
@@ -762,16 +795,16 @@ SCORE: #*********************"""
   ╔═╝       ╱╱│╲╲       ╚═╗  
 ╔═╝         ╱╱│╲╲         ╚═╗
 ║         ╱╱╱╱│╲╲╲╲         ║
-║         ╔╱╱╱│╲╲╲╗         ║
-║         ║╱╱╱│╲╲╲║         ╏
+║        |╔╱╱╱│╲╲╲╗         ║
+║        |║╱╱╱│╲╲╲╲         ╏
 ║       ╱╱╱╱╱╱│╲╲╲╲╲╲═══════╝
 ║         ╱╱╱╱│╲╲╲╲          
 ║       ╱╱╱╱╱╱│╲╲╲╲╲╲═══╗    
-║         ╱╱╱╱│╲╲╲╲     ╚═╗  
+║        ╱╱╱╱╱│╲╲╲╲     ╚═╗  
 ╚═╗   ╱╱╱╱╱╱╱╱│╲╲╲╲╲╲╲╲   ╚═╗
   ╚═╗     ╱╱╱╱│╲╲╲╲         ║
     ╚╱╱╱╱╱╱╱╱╱│╲╲╲╲╲╲╲╲╲    ║
-         ╱╱╱╱╱│╲╲╲╲╲        ║
+         ╱╱╱╱╱ ╲╲╲╲╲        ║
 ╔═════╱╱╱╱╱╱╱╱│╲╲╲╲╲╲╲╲     ║
 ╏  ╱╱╱╱╱╱╱╱╱╱│ │╲╲╲╲╲╲╲╲╲╲  ║
 ║         ╚══│ │══╝         ║
@@ -830,20 +863,22 @@ end
 function islegal(gs::GameState, cell; ghost::Union{Missing,GhostInfo}=missing)
     legal_marks = [" ", gs.params.raw.dot, gs.params.raw.super_dot, gs.params.raw.portal_left, gs.params.raw.portal_right, "-"]
     union!(legal_marks, gs.extra_legals)
-    if !ismissing(ghost)
+    if ismissing(ghost)
+        push!(legal_marks, gs.params.raw.secret)
+    else
         push!(legal_marks, gs.params.raw.pacman, gs.ghost_chars...)
         if !ghost.isout
             push!(legal_marks, "─")
         end
     end
-    return cell in legal_marks
+    return string(cell[1]) in legal_marks
 end
 
 isportal(gs, cell) = cell ∈ [gs.params.raw.portal_left, gs.params.raw.portal_right]
 onghost(gs, cell; exclude="") = any(map(c->occursin(c, cell), filter(c->c != exclude, gs.ghost_chars)))
 whichghosts(cell) = length(cell) == 1 ? [cell] : split(cell, "+")
 outofbounds(cell) = cell == "*"
-ischaracter(gs, cell) = string(cell[1]) ∈ [gs.params.raw.pacman, gs.ghost_chars...]
+ischaracter(gs, cell) = string(cell[1]) ∈ [gs.params.raw.pacman, gs.params.raw.dead_pacman, gs.ghost_chars...]
 
 function stylemap(gs::GameState, cells; score=0, flicker=false, finished=false, underlay_cells=[])
     params = gs.params
@@ -878,7 +913,7 @@ function stylemap(gs::GameState, cells; score=0, flicker=false, finished=false, 
     function repaint_ghost(c_ghost, f_ghost)
         if haskey(gs.ghost_infos, c_ghost)
             gi = gs.ghost_infos[c_ghost]
-            if gi.isblue
+            if gi.isblue && length(gs.ghost_chars) > 1
                 if gi.isblinking && gi.blinkingon
                     return gs.ghosts.blinking(border)
                 else
@@ -905,6 +940,7 @@ function stylemap(gs::GameState, cells; score=0, flicker=false, finished=false, 
     field = replace(field, params.raw.portal_passage=>" ") # legal area
     field = replace(field, params.raw.portal_left=>" ") # left portal
     field = replace(field, params.raw.portal_right=>" ") # right portal
+    field = replace(field, params.raw.secret=>" ") # PacMan-only pass-through secret way
     field = replace(field, params.raw.screen=>params.styled.screen) # pass-through screen
     field = replace(field, params.raw.ghosts.inky=>repaint_ghost(params.raw.ghosts.inky, gs.ghosts.inky))
     field = replace(field, params.raw.ghosts.blinky=>repaint_ghost(params.raw.ghosts.blinky, gs.ghosts.blinky))
