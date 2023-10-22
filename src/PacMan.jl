@@ -480,7 +480,7 @@ function moveghost!(gs::GameState)
         if p_random ≤ p_random_thresh
             los_pellets = count_los_pellets(gs, p_ghost, ghostinfo)
 
-            if curr_dir != [0, 0]
+            if curr_dir != [0, 0] && ghostinfo.isout
                 # do not double back (i.e., go backwards)
                 los_pellets[dirs[findfirst(map(d->d == curr_dir .* -1, dirs))]] = 0
             end
