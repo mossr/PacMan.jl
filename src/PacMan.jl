@@ -10,7 +10,7 @@ export play, restart, resetdelays!, GameState
 # play when running `using PacMan`
 function __init__()
     # restart() # for auto-start
-    @info """PacMan.jl!
+    @info """🟡 ᐧ ᐧ ᐧ ᐧ •
     
     To start PacMan, run: play()
 
