@@ -5,12 +5,24 @@ using Distributions
 using LinearAlgebra
 using Statistics
 
-export play, restart, resetdelays!
+export play, restart, resetdelays!, GameState
 
 # play when running `using PacMan`
 function __init__()
     # restart() # for auto-start
-    @info "To start PacMan, run: play()"
+    @info """PacMan.jl!
+    
+    To start PacMan, run: play()
+
+    Controls:
+        - `a` and `d` to apply left and right velocity
+        - `s` to apply down velocity
+        - `w` to apply up velocity
+        - `backtick` to pause, then `play()` to resume
+
+    Change speed with:
+        play(frame_update=8) # larger == slower
+    """
 end
 
 Base.@kwdef struct StyledChars
@@ -204,7 +216,8 @@ function play(gs::GameState=GameState();
               maze_type::Int=gs.maze_type,
               is_pocman::Bool=gs.is_pocman,
               random_pellets::Bool=gs.random_pellets,
-              delay::Number=gs.delay)
+              delay::Number=gs.delay,
+              frame_update::Number=gs.frame_update)
     if ismissing(gs.cells)
         resetstate!(gs)
     else
@@ -219,9 +232,10 @@ function play(gs::GameState=GameState();
         hide_cursor()
         clearscreen()
 
-        if ismissing(gs.cells) || is_pocman != gs.is_pocman || maze_type != gs.maze_type || random_pellets != gs.random_pellets
+        if ismissing(gs.cells) || is_pocman != gs.is_pocman || maze_type != gs.maze_type || random_pellets != gs.random_pellets || frame_update != gs.frame_update
             gs.maze_type = maze_type
             gs.random_pellets = random_pellets
+            gs.frame_update = frame_update
             resetfield!(gs)
         end
         gs.is_pocman = is_pocman
